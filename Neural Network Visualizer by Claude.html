@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NeuralForge — Neural Network Visualizer</title>
+<style>
+:root{--bg:#070b1a;--p:rgba(18,26,58,.72);--l:rgba(120,160,255,.2);--t:#e6ebff;--d:#8a95c4;--c:#38e1ff;--v:#9b7bff;--o:#ffa35c}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at 15% 0,#16234f,var(--bg) 60%) fixed;color:var(--t);font:13px/1.45 'Segoe UI',system-ui,sans-serif}
+header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--l);background:rgba(7,11,26,.85);position:sticky;top:0;z-index:5}
+h1{margin:0;font-size:18px;letter-spacing:.1em}h1 span{color:var(--c)}
+.sub{color:var(--d);font-style:italic;margin-right:8px}.sp{flex:1}
+#status{padding:2px 12px;border-radius:99px;border:1px solid var(--c);color:var(--c);font-size:12px}
+main{display:grid;grid-template-columns:270px 1fr 290px;grid-template-areas:"l c r" "b b b";gap:10px;padding:10px}
+#left{grid-area:l}#center{grid-area:c}#right{grid-area:r}#bottom{grid-area:b;display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:12px}
+@media(max-width:1050px){main{grid-template-columns:1fr;grid-template-areas:"c" "l" "r" "b"}#bottom{grid-template-columns:1fr}}
+.panel{background:var(--p);border:1px solid var(--l);border-radius:12px;padding:12px;backdrop-filter:blur(8px);min-width:0}
+h3{margin:12px 0 6px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--c)}h3:first-child{margin-top:0}
+.f{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:3px 0;align-items:center}.f label{color:var(--d)}
+input,select,button{font:inherit;color:var(--t);background:rgba(10,16,40,.9);border:1px solid var(--l);border-radius:7px;padding:5px 8px;min-width:0}
+input[type=checkbox]{padding:0}
+button{cursor:pointer;transition:.15s}button:hover{border-color:var(--c);box-shadow:0 0 8px rgba(56,225,255,.3)}
+button.pri{background:linear-gradient(90deg,#1b6dff,var(--v));border:0}
+:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+.row{display:flex;gap:5px;flex-wrap:wrap;margin:5px 0}.row button{flex:1}
+canvas{width:100%;display:block;border-radius:8px;background:rgba(4,8,22,.7)}
+#net{height:420px;cursor:grab}#bd{height:270px;aspect-ratio:1}#ch{height:230px}
+.bar{display:flex;gap:12px;flex-wrap:wrap;color:var(--d);margin-bottom:6px;align-items:center}
+.bar label{display:flex;gap:4px;align-items:center}
+#log,#met,#insp{font:12px/1.5 ui-monospace,Consolas,monospace;max-height:230px;overflow:auto;color:#c9d2ff}
+#insp input{width:78px;padding:2px 4px}.bad{color:#ff7b8a}.ok{color:#5ff0a0}.dim{color:var(--d)}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body>
+<header><h1>NEURAL<span>FORGE</span></h1><span class="sub">Explore. Train. Understand Intelligence.</span>
+<input id="pname" value="Untitled project" aria-label="Project name" size="16"><span id="status" role="status">Idle</span><span class="sp"></span>
+<button id="bSave" title="Save config + model to this browser">Save</button><button id="bLoad">Load</button>
+<button id="bExp" title="Download model JSON">Export model</button><button id="bImp">Import model</button><input type="file" id="file" accept=".json" hidden>
+<button id="bCsv">History CSV</button><button id="bTest" title="Run in-app numerical tests">Diagnostics</button></header>
+<main>
+<aside class="panel" id="left">
+<h3>Dataset</h3>
+<div class="f"><label for="ds">Dataset</label><select id="ds"><option value="xor">XOR</option><option value="circle">Circles</option><option value="moons">Two moons</option><option value="spiral">Spiral</option><option value="linear">Linear regression</option><option value="custom">Custom (click)</option></select></div>
+<div class="f"><label for="n">Samples</label><input id="n" type="number" value="200" min="10" max="2000"></div>
+<div class="f"><label for="noise">Noise</label><input id="noise" type="number" value="0.1" min="0" max="1" step="0.05"></div>
+<div class="f"><label for="split">Train fraction</label><input id="split" type="number" value="0.75" min="0.3" max="0.9" step="0.05"></div>
+<div class="f"><label for="slope">Slope / intercept</label><span style="display:flex;gap:3px"><input id="slope" type="number" value="2" step="0.1" style="width:50%"><input id="icpt" type="number" value="0.5" step="0.1" style="width:50%"></span></div>
+<div class="f"><label for="seed">Random seed</label><input id="seed" type="number" value="42"></div>
+<div class="f"><label for="shuf">Shuffle</label><input id="shuf" type="checkbox" checked></div>
+<div class="row"><button id="bGen">Regenerate</button></div>
+<div class="row"><select id="cls" aria-label="Custom class"><option value="0">Class 0 (blue)</option><option value="1">Class 1 (orange)</option></select><button id="bUndo">Undo</button><button id="bClr">Clear</button></div>
+<h3>Architecture</h3>
+<div class="f"><label for="hid" title="Comma-separated hidden layer sizes; empty = no hidden layer">Hidden layers</label><input id="hid" value="8,8"></div>
+<div class="row"><button id="bAddL">+ Layer</button><button id="bRmL">− Layer</button></div>
+<div class="f"><label for="act">Hidden activation</label><select id="act"><option>tanh</option><option>relu</option><option>sigmoid</option><option>leaky</option><option>linear</option></select></div>
+<div class="f"><label for="init" title="Xavier suits tanh/sigmoid; He suits ReLU/Leaky ReLU">Initialization</label><select id="init"><option value="xavier">Xavier</option><option value="he">He</option><option value="random">Random</option></select></div>
+<div class="dim" id="archinfo"></div>
+<h3>Training</h3>
+<div class="f"><label for="opt">Optimizer</label><select id="opt"><option value="mini">Mini-batch GD</option><option value="sgd">Stochastic GD</option><option value="batch">Batch GD</option><option value="adam">Adam (mini-batch)</option></select></div>
+<div class="f"><label for="lr">Learning rate</label><input id="lr" type="number" value="0.1" step="0.01"></div>
+<div class="f"><label for="ep">Epochs</label><input id="ep" type="number" value="500"></div>
+<div class="f"><label for="bs">Batch size</label><input id="bs" type="number" value="16"></div>
+<div class="row"><button id="bTrain" class="pri">Train</button><button id="bPause">Pause/Resume</button><button id="bStop">Stop</button></div>
+<div class="row"><button id="bStep">1 epoch</button><button id="bFwd" title="Forward pass on next sample">Forward pass</button></div>
+<div class="row"><button id="bRW">Reset weights</button><button id="bRA">Reset all</button></div>
+<div class="dim">Space = pause/resume · F = fit diagram</div>
+</aside>
+<section class="panel" id="center">
+<div class="bar"><label><input type="checkbox" id="shW" checked>Weights</label><label><input type="checkbox" id="shA" checked>Activations</label><label><input type="checkbox" id="shL" checked>Layer labels</label><button id="bFit">Fit</button><span class="dim">Wheel = zoom · drag = pan · click neuron to inspect</span></div>
+<canvas id="net" aria-label="Neural network diagram"></canvas>
+<div class="dim" style="margin-top:6px">Cyan = positive weight, orange = negative; thickness = |w|. A large weight does not by itself mean a feature is important — its effect depends on the rest of the network. Node shading = activation for the displayed sample.</div>
+</section>
+<aside class="panel" id="right"><h3>Inspector</h3><div id="insp" class="dim">Click a neuron.</div>
+<h3>Decision boundary / fit</h3><canvas id="bd" aria-label="Decision boundary"></canvas>
+<div class="f"><label for="res">Grid resolution</label><select id="res"><option>20</option><option selected>40</option><option>70</option></select></div>
+<div class="dim">Grid is an approximation. Filled dots = train, rings = test.</div></aside>
+<section class="panel" id="bottom"><div><h3>Loss (real recorded history)</h3><canvas id="ch" aria-label="Loss chart"></canvas><div id="prog" class="dim"></div></div>
+<div><h3>Metrics</h3><div id="met"></div></div><div><h3>Log</h3><div id="log" aria-live="polite"></div></div></section>
+</main>
+<script>
+const $=id=>document.getElementById(id),fin=v=>Number.isFinite(v)?v:0;
+const rng=s=>()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+const gauss=r=>Math.sqrt(-2*Math.log(r()+1e-12))*Math.cos(6.283185307*r());
+const sig=z=>z>=0?1/(1+Math.exp(-z)):Math.exp(z)/(1+Math.exp(z));
+const ACT={sigmoid:{f:sig,d:(z,a)=>a*(1-a)},relu:{f:z=>z>0?z:0,d:z=>z>0?1:0},tanh:{f:Math.tanh,d:(z,a)=>1-a*a},linear:{f:z=>z,d:()=>1},leaky:{f:z=>z>0?z:.01*z,d:z=>z>0?1:.01}};
+/* ---------- Neural network engine ---------- */
+class Net{
+ constructor(sizes,act,init,seed,reg){this.sizes=sizes;this.act=act;this.reg=reg;this.outAct=reg?'linear':'sigmoid';const r=rng(seed);this.W=[];this.B=[];
+  for(let l=1;l<sizes.length;l++){const n=sizes[l-1],m=sizes[l],lim=init==='xavier'?Math.sqrt(6/(n+m)):init==='he'?Math.sqrt(6/n):.5;
+   this.W.push(Array.from({length:m},()=>Array.from({length:n},()=>(r()*2-1)*lim)));this.B.push(new Array(m).fill(0))}
+  this.init=JSON.stringify({W:this.W,B:this.B})}
+ fa(l){return l===this.W.length-1?this.outAct:this.act}
+ forward(x){const A=[x],Z=[null];let a=x;
+  for(let l=0;l<this.W.length;l++){const f=ACT[this.fa(l)].f,z=this.W[l].map((w,j)=>{let s=this.B[l][j];for(let i=0;i<w.length;i++)s+=w[i]*a[i];return fin(s)});a=z.map(v=>fin(f(v)));Z.push(z);A.push(a)}
+  return{A,Z}}
+ predict(x){return this.forward(x).A.at(-1)[0]}
+ loss(x,y){const p=this.predict(x);if(this.reg)return(p-y)**2;const q=Math.min(1-1e-12,Math.max(1e-12,p));return-(y*Math.log(q)+(1-y)*Math.log(1-q))}
+ grads(x,y){const{A,Z}=this.forward(x),L=this.W.length,gW=[],gB=[];
+  let d=[this.reg?2*(A[L][0]-y):A[L][0]-y]; /* sigmoid+BCE and linear+MSE output deltas */
+  for(let l=L-1;l>=0;l--){gW[l]=d.map(dj=>A[l].map(ai=>dj*ai));gB[l]=d.slice();
+   if(l>0){const df=ACT[this.fa(l-1)].d;d=A[l].map((_,i)=>{let s=0;for(let j=0;j<d.length;j++)s+=d[j]*this.W[l][j][i];return s*df(Z[l][i],A[l][i])})}}
+  return{gW,gB,out:A[L][0]}}}
+/* ---------- Datasets ---------- */
+function makeData(kind,n,noise,r,o){const X=[],y=[],g=()=>gauss(r)*noise;
+ for(let i=0;i<n;i++){const c=i%2;
+  if(kind==='xor'){const a=r()*2-1,b=r()*2-1;X.push([a+g(),b+g()]);y.push((a>0)!==(b>0)?1:0)}
+  else if(kind==='linear'){const a=r()*2-1;X.push([a]);y.push(o.m*a+o.b+g())}
+  else if(kind==='circle'){const rad=c?r()*.45:.7+r()*.3,t=r()*6.2832;X.push([rad*Math.cos(t)+g(),rad*Math.sin(t)+g()]);y.push(c)}
+  else if(kind==='moons'){const t=r()*Math.PI,a=c?1-Math.cos(t):Math.cos(t),b=c?.5-Math.sin(t):Math.sin(t);X.push([(a-.5)/1.5+g(),(b-.25)/.75+g()]);y.push(c)}
+  else{const t=r(),rad=t*.95+.05,ang=t*11.3+c*Math.PI;X.push([rad*Math.cos(ang)+g()*.6,rad*Math.sin(ang)+g()*.6]);y.push(c)}}
+ return{X,y}}
+/* ---------- Metrics ---------- */
+function clsMetrics(ys,ps){let tp=0,fp=0,tn=0,fn=0;ys.forEach((y,i)=>{const p=ps[i]>=.5?1:0;if(y&&p)tp++;else if(!y&&p)fp++;else if(!y&&!p)tn++;else fn++});
+ const pr=tp+fp?tp/(tp+fp):null,rc=tp+fn?tp/(tp+fn):null;return{tp,fp,tn,fn,acc:(tp+tn)/ys.length,pr,rc,f1:pr!==null&&rc!==null&&pr+rc>0?2*pr*rc/(pr+rc):null}}
+function regMetrics(ys,ps){const n=ys.length,m=ys.reduce((a,b)=>a+b,0)/n;let se=0,ae=0,st=0;ys.forEach((y,i)=>{se+=(y-ps[i])**2;ae+=Math.abs(y-ps[i]);st+=(y-m)**2});return{mse:se/n,mae:ae/n,rmse:Math.sqrt(se/n),r2:st>0?1-se/st:null}}
+/* ---------- State ---------- */
+const S={X:[],y:[],tr:[],te:[],net:null,hist:[],epoch:0,custom:[],sel:null,vi:0,view:null,lastG:null,mod:false,opt:null,t:0,pos:[]};
+const V={k:1,tx:0,ty:0};let running=false,paused=false,token=0;
+const task=()=>$('ds').value==='linear'?'reg':'cls';
+const log=(m,c='')=>{const e=document.createElement('div');e.className=c;e.textContent=m;$('log').prepend(e);while($('log').children.length>150)$('log').lastChild.remove()};
+const setSt=s=>$('status').textContent=s;
+const f4=v=>v===null||v===undefined?'—':(+v).toFixed(4);
+function hidden(){const s=$('hid').value.trim();if(s==='')return[];if(!/^\d+(\s*,\s*\d+)*$/.test(s))throw Error('Hidden layers must be comma-separated integers, e.g. 8,8');
+ const a=s.split(',').map(Number);if(a.length>6||a.some(v=>v<1||v>32))throw Error('Use at most 6 hidden layers with 1–32 neurons each');return a}
+function cfg(){const c={lr:+$('lr').value,ep:Math.floor($('ep').value),bs:Math.floor($('bs').value),opt:$('opt').value,seed:Math.floor($('seed').value)||0,shuf:$('shuf').checked};
+ if(!(c.lr>0&&c.lr<=10))throw Error('Learning rate must be in (0, 10]');if(!(c.ep>=1&&c.ep<=50000))throw Error('Epochs must be 1–50000');if(!(c.bs>=1))throw Error('Batch size must be ≥ 1');return c}
+function shuf(a,r){for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function gen(){const kind=$('ds').value,seed=Math.floor($('seed').value)||0,r=rng(seed);let n=Math.floor($('n').value);
+ if(!(n>=10&&n<=2000))return log('Samples must be 10–2000','bad');const noise=+$('noise').value;
+ if(kind==='custom'){S.X=S.custom.map(p=>[p[0],p[1]]);S.y=S.custom.map(p=>p[2])}
+ else{const d=makeData(kind,n,noise,r,{m:+$('slope').value,b:+$('icpt').value});S.X=d.X;S.y=d.y}
+ const N=S.X.length,idx=[...Array(N).keys()];if($('shuf').checked)shuf(idx,rng(seed+7));
+ const nt=Math.max(1,Math.min(N-1,Math.round(N*(1-+$('split').value))));
+ if(N<2){S.tr=[];S.te=[]}else{S.te=idx.slice(0,nt);S.tr=idx.slice(nt)}
+ $('cls').disabled=$('bUndo').disabled=$('bClr').disabled=kind!=='custom'}
+function build(msg){let h;try{h=hidden()}catch(e){return log(e.message,'bad')}
+ const reg=task()==='reg',sizes=[reg?1:2,...h,1];
+ S.net=new Net(sizes,$('act').value,$('init').value,Math.floor($('seed').value)||0,reg);
+ S.hist=[];S.epoch=0;S.lastG=null;S.mod=false;S.opt=null;S.t=0;S.sel=null;S.vi=0;refView();
+ $('archinfo').textContent='Architecture: '+sizes.join(' → ')+(S.net.W.reduce((a,w,l)=>a+w.length*w[0].length+w.length,0)?' · params '+S.net.W.reduce((a,w)=>a+w.length*w[0].length+w.length,0):'');
+ if(msg)log(msg);fitView();drawAll()}
+function refView(){S.view=S.net&&S.X.length?S.net.forward(S.X[S.vi%S.X.length]):null}
+/* ---------- Training ---------- */
+function ev(idx){if(!idx.length)return{loss:NaN,acc:NaN};let L=0,ok=0;for(const k of idx){L+=S.net.loss(S.X[k],S.y[k]);if(!S.net.reg&&(S.net.predict(S.X[k])>=.5?1:0)===S.y[k])ok++}return{loss:L/idx.length,acc:ok/idx.length}}
+function trainBatch(idx,c){const net=S.net,z=a=>a.map(m=>m.map(r=>r.map(()=>0))),zb=a=>a.map(b=>b.map(()=>0));
+ const gW=z(net.W),gB=zb(net.B);
+ for(const k of idx){const g=net.grads(S.X[k],S.y[k]);g.gW.forEach((m,l)=>m.forEach((r,j)=>r.forEach((v,i)=>gW[l][j][i]+=v)));g.gB.forEach((b,l)=>b.forEach((v,j)=>gB[l][j]+=v))}
+ const s=1/idx.length;gW.forEach(m=>m.forEach(r=>r.forEach((v,i)=>r[i]=fin(v*s))));gB.forEach(b=>b.forEach((v,j)=>b[j]=fin(v*s)));S.lastG={gW,gB};
+ if(c.opt==='adam'&&!S.opt)S.opt={mW:z(net.W),vW:z(net.W),mB:zb(net.B),vB:zb(net.B)};
+ const t=++S.t,b1=.9,b2=.999,up=(p,g,m,v,i)=>{if(c.opt==='adam'){m[i]=b1*m[i]+(1-b1)*g;v[i]=b2*v[i]+(1-b2)*g*g;return p-c.lr*(m[i]/(1-b1**t))/(Math.sqrt(v[i]/(1-b2**t))+1e-8)}return p-c.lr*g};
+ net.W.forEach((m,l)=>m.forEach((r,j)=>r.forEach((w,i)=>{const o=S.opt;r[i]=fin(up(w,gW[l][j][i],o&&o.mW[l][j],o&&o.vW[l][j],i))})));
+ net.B.forEach((b,l)=>b.forEach((v,j)=>{const o=S.opt;b[j]=fin(up(v,gB[l][j],o&&o.mB[l],o&&o.vB[l],j))}))}
+function epoch(c){if(S.epoch>=c.ep||!S.tr.length)return false;const idx=S.tr.slice();if(c.shuf)shuf(idx,rng(c.seed+S.epoch+1));
+ const bs=c.opt==='sgd'?1:c.opt==='batch'?idx.length:Math.min(c.bs,idx.length);for(let i=0;i<idx.length;i+=bs)trainBatch(idx.slice(i,i+bs),c);
+ S.epoch++;const a=ev(S.tr),b=ev(S.te);S.hist.push({e:S.epoch,tl:a.loss,vl:b.loss,ta:a.acc,va:b.acc});if(S.hist.length>3000)S.hist=S.hist.filter((_,i)=>i%2===0);return true}
+function run(){const c=cfg(),my=++token;running=true;paused=false;setSt('Training');
+ const loop=()=>{if(my!==token||!running||paused)return;const t0=performance.now();let more=true;
+  do{more=epoch(c)}while(more&&performance.now()-t0<12);refView();drawAll();
+  if(!more){running=false;setSt('Completed');const h=S.hist.at(-1);log('Finished '+S.epoch+' epochs · train loss '+f4(h&&h.tl)+' · test loss '+f4(h&&h.vl)+(S.net.reg?'':' · test acc '+f4(h&&h.va)));return}
+  requestAnimationFrame(loop)};requestAnimationFrame(loop)}
+function guard(fn){try{fn()}catch(e){log(e.message,'bad')}}
+/* ---------- Drawing ---------- */
+function cv(c){const d=devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;if(c.width!==Math.round(w*d)||c.height!==Math.round(h*d)){c.width=Math.round(w*d);c.height=Math.round(h*d)}const x=c.getContext('2d');x.setTransform(d,0,0,d,0,0);return[x,w,h]}
+const col=(v,a)=>v>=0?`rgba(56,225,255,${a})`:`rgba(255,163,92,${a})`;
+function fitView(){V.k=1;V.tx=0;V.ty=0}
+function drawNet(){if(!S.net)return;const[x,w,h]=cv($('net')),sz=S.net.sizes,L=sz.length;x.clearRect(0,0,w,h);x.save();x.translate(V.tx,V.ty);x.scale(V.k,V.k);
+ const gap=Math.min(48,(h-70)/Math.max(...sz)),r=Math.max(5,Math.min(16,gap*.4)),px=l=>60+(w-120)*l/(L-1),py=(l,j)=>h/2+10+(j-(sz[l]-1)/2)*gap;
+ S.pos=sz.map((n,l)=>Array.from({length:n},(_,j)=>[px(l),py(l,j),r]));
+ let mw=1e-9;S.net.W.forEach(m=>m.forEach(rw=>rw.forEach(v=>mw=Math.max(mw,Math.abs(v)))));
+ const edges=sz.reduce((a,n,l)=>l?a+n*sz[l-1]:a,0);
+ S.net.W.forEach((m,l)=>m.forEach((rw,j)=>rw.forEach((v,i)=>{const[x1,y1]=S.pos[l][i],[x2,y2]=S.pos[l+1][j],q=Math.abs(v)/mw;x.strokeStyle=col(v,.12+.75*q);x.lineWidth=.4+2.6*q;x.beginPath();x.moveTo(x1,y1);x.lineTo(x2,y2);x.stroke();
+  if($('shW').checked&&edges<=60){x.fillStyle='#c9d2ff';x.font='9px monospace';x.fillText(v.toFixed(2),x1+(x2-x1)*.62-8,y1+(y2-y1)*.62-2)}})));
+ sz.forEach((n,l)=>{if($('shL').checked){x.fillStyle='#8a95c4';x.font='11px sans-serif';x.textAlign='center';x.fillText(l===0?'Input':l===L-1?'Output':'Hidden '+l,px(l),18);x.textAlign='start'}
+  for(let j=0;j<n;j++){const[cx,cy]=S.pos[l][j],a=S.view?S.view.A[l][j]:0,t=Math.tanh(a);x.beginPath();x.arc(cx,cy,r,0,6.2832);x.fillStyle=col(t,.2+.8*Math.abs(t));x.fill();
+   const sel=S.sel&&S.sel.l===l&&S.sel.j===j;x.lineWidth=sel?3:1;x.strokeStyle=sel?'#9b7bff':'rgba(230,235,255,.6)';x.stroke();
+   if($('shA').checked&&S.view&&r>=8){x.fillStyle='#fff';x.font='9px monospace';x.textAlign='center';x.fillText(a.toFixed(2),cx,cy+3);x.textAlign='start'}}});
+ x.restore()}
+function drawBD(){if(!S.net)return;const[x,w,h]=cv($('bd')),reg=S.net.reg;x.clearRect(0,0,w,h);
+ if(!reg){const R=+$('res').value,cw=w/R,ch=h/R;for(let i=0;i<R;i++)for(let j=0;j<R;j++){const p=S.net.predict([-1.3+2.6*(i+.5)/R,1.3-2.6*(j+.5)/R]);x.fillStyle=`rgba(${56+199*p|0},${140+23*p|0},${255-163*p|0},.5)`;x.fillRect(i*cw,j*ch,cw+1,ch+1)}
+  S.X.forEach((p,k)=>{const cx=(p[0]+1.3)/2.6*w,cy=(1.3-p[1])/2.6*h,te=S.te.includes(k);x.beginPath();x.arc(cx,cy,te?4:3,0,6.2832);x.strokeStyle='#fff';x.lineWidth=te?1.8:.8;x.fillStyle=S.y[k]?'#ffa35c':'#388cff';if(!te)x.fill();x.stroke()})}
+ else{const mx=k=>(k+1.1)/2.2*w,my=v=>h/2-v/2.5*h/2;x.strokeStyle='rgba(255,255,255,.15)';x.beginPath();x.moveTo(0,h/2);x.lineTo(w,h/2);x.stroke();
+  S.X.forEach((p,k)=>{const te=S.te.includes(k);x.beginPath();x.arc(mx(p[0]),my(S.y[k]),te?4:3,0,6.2832);x.strokeStyle='#fff';x.fillStyle='#38e1ff';if(!te)x.fill();x.stroke()});
+  x.beginPath();x.strokeStyle='#ffa35c';x.lineWidth=2;for(let i=0;i<=60;i++){const a=-1.1+2.2*i/60,px_=mx(a),py_=my(S.net.predict([a]));i?x.lineTo(px_,py_):x.moveTo(px_,py_)}x.stroke()}}
+function drawChart(){const[x,w,h]=cv($('ch')),H=S.hist;x.clearRect(0,0,w,h);const P={l:44,r:10,t:14,b:30};x.fillStyle='#8a95c4';x.font='11px sans-serif';
+ if(!H.length){x.textAlign='center';x.fillText('No training history yet — press Train',w/2,h/2);x.textAlign='start';return}
+ const mxE=H.at(-1).e,vals=H.flatMap(p=>[p.tl,p.vl]).filter(Number.isFinite),mxL=Math.max(...vals,1e-9),X=e=>P.l+(w-P.l-P.r)*e/mxE,Y=v=>h-P.b-(h-P.t-P.b)*v/mxL;
+ x.strokeStyle='rgba(255,255,255,.2)';x.beginPath();x.moveTo(P.l,P.t);x.lineTo(P.l,h-P.b);x.lineTo(w-P.r,h-P.b);x.stroke();
+ x.fillText(mxL.toPrecision(3),2,P.t+8);x.fillText('0',30,h-P.b);x.fillText('Epoch '+mxE,w/2-20,h-8);x.save();x.translate(10,h/2+10);x.rotate(-Math.PI/2);x.fillText('Loss',0,0);x.restore();
+ [['tl','#38e1ff','train'],['vl','#9b7bff','test']].forEach(([k,c,n],q)=>{x.beginPath();x.strokeStyle=c;x.lineWidth=1.6;let s=false;H.forEach(p=>{if(!Number.isFinite(p[k]))return;s?x.lineTo(X(p.e),Y(p[k])):x.moveTo(X(p.e),Y(p[k]));s=true});x.stroke();x.fillStyle=c;x.fillText('— '+n,w-110+q*55,P.t+4)})}
+function drawMet(){const el=$('met');if(!S.net||!S.te.length){el.textContent='No data.';return}
+ const out=idx=>idx.map(k=>S.net.predict(S.X[k])),yt=S.te.map(k=>S.y[k]),pt=out(S.te),h=S.hist.at(-1);let s='Epoch '+S.epoch+(h?' · train loss '+f4(h.tl)+' · test loss '+f4(h.vl):'')+'\nTrain n='+S.tr.length+' · Test n='+S.te.length+(S.mod?'\n⚠ weights edited manually — retrain':'')+'\n\nTEST SET (held out, never used for updates):\n';
+ if(S.net.reg){const m=regMetrics(yt,pt);s+=`MSE ${f4(m.mse)}  MAE ${f4(m.mae)}\nRMSE ${f4(m.rmse)}  R² ${f4(m.r2)}`}
+ else{const m=clsMetrics(yt,pt);s+=`Accuracy ${f4(m.acc)}\nPrecision ${f4(m.pr)}  Recall ${f4(m.rc)}\nF1 ${f4(m.f1)}\nConfusion [actual→pred]\n 0→0:${m.tn}  0→1:${m.fp}\n 1→0:${m.fn}  1→1:${m.tp}`;if(S.hist.length>20&&h.tl>.6&&!running)s+='\n\nModel has not learned well: try more epochs, another learning rate, a hidden layer, or a different activation.'}
+ el.style.whiteSpace='pre';el.textContent=s;$('prog').textContent=running||S.epoch?'Epoch '+S.epoch+' / '+$('ep').value:''}
+function inspect(){const el=$('insp'),s=S.sel;if(!s||!S.net){el.className='dim';el.textContent='Click a neuron.';return}
+ el.className='';const{l,j}=s,n=S.net,A=S.view&&S.view.A[l][j],Z=S.view&&S.view.Z[l]?S.view.Z[l][j]:null;
+ let h=`<b>${l===0?'Input':l===n.sizes.length-1?'Output':'Hidden '+l}</b> · neuron ${j}<br>activation fn: ${l===0?'identity (input)':n.fa(l-1)}<br>activation: ${f4(A)}<br>`;
+ if(l>0){h+=`weighted sum z: ${f4(Z)}<br>bias <input type="number" step="0.1" data-k="b" data-l="${l-1}" data-j="${j}" value="${+n.B[l-1][j].toFixed(5)}" aria-label="Bias"> `+(S.lastG?`<span class="dim">grad ${f4(S.lastG.gB[l-1][j])}</span>`:'')+'<br>Incoming weights:<br>';
+  n.W[l-1][j].forEach((w,i)=>h+=`n${i} → <input type="number" step="0.1" data-k="w" data-l="${l-1}" data-j="${j}" data-i="${i}" value="${+w.toFixed(5)}" aria-label="Weight from neuron ${i}"> `+(S.lastG?`<span class="dim">g ${f4(S.lastG.gW[l-1][j][i])}</span>`:'')+'<br>')}
+ if(l<n.sizes.length-1)h+='Outgoing weights:<br>'+n.W[l].map((r,k)=>`→ n${k}: ${f4(r[j])}`).join('<br>');
+ h+='<br><span class="dim">z = Σ wᵢxᵢ + b, a = f(z). Edit a value to experiment; retrain afterwards.</span>';el.innerHTML=h}
+function drawAll(){drawNet();drawBD();drawChart();drawMet();inspect()}
+/* ---------- Model I/O ---------- */
+const ser=()=>({format:'neuralforge-v1',task:task(),sizes:S.net.sizes,activation:S.net.act,outputActivation:S.net.outAct,W:S.net.W,B:S.net.B,normalization:null});
+function validate(m){if(!m||typeof m!=='object'||m.format!=='neuralforge-v1')return'Not a NeuralForge v1 model file';
+ if(!Array.isArray(m.sizes)||m.sizes.length<2||m.sizes.some(v=>!Number.isInteger(v)||v<1||v>256)||m.sizes.at(-1)!==1)return'Invalid architecture';
+ if(!ACT[m.activation]||!['sigmoid','linear'].includes(m.outputActivation))return'Unknown activation';
+ if(!Array.isArray(m.W)||!Array.isArray(m.B)||m.W.length!==m.sizes.length-1||m.B.length!==m.W.length)return'Weights do not match architecture';
+ for(let l=0;l<m.W.length;l++){if(!Array.isArray(m.W[l])||m.W[l].length!==m.sizes[l+1]||!Array.isArray(m.B[l])||m.B[l].length!==m.sizes[l+1])return'Layer '+l+' shape mismatch';
+  for(const r of m.W[l])if(!Array.isArray(r)||r.length!==m.sizes[l]||r.some(v=>typeof v!=='number'||!Number.isFinite(v)))return'Layer '+l+' has invalid weights';
+  if(m.B[l].some(v=>typeof v!=='number'||!Number.isFinite(v)))return'Layer '+l+' has invalid biases'}return null}
+function load(m){const e=validate(m);if(e)throw Error('Import rejected: '+e);const reg=m.outputActivation==='linear';
+ if(reg!==(task()==='reg')||m.sizes[0]!==(reg?1:2))throw Error('Import rejected: model does not match the selected dataset ('+m.sizes[0]+' inputs, '+(reg?'regression':'classification')+')');
+ S.net=new Net(m.sizes,m.activation,'random',1,reg);S.net.W=JSON.parse(JSON.stringify(m.W));S.net.B=JSON.parse(JSON.stringify(m.B));S.net.init=JSON.stringify({W:S.net.W,B:S.net.B});
+ $('hid').value=m.sizes.slice(1,-1).join(',');$('act').value=m.activation;S.hist=[];S.epoch=0;S.opt=null;S.sel=null;refView();drawAll()}
+function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)}
+const IDS=['ds','n','noise','split','slope','icpt','seed','hid','act','init','opt','lr','ep','bs','res'];
+/* ---------- Diagnostics ---------- */
+function diagnostics(){const R=[],t=(n,f)=>{try{const v=f();R.push([n,v===true,v===true?'':String(v)])}catch(e){R.push([n,false,e.message])}},near=(a,b,e=1e-6)=>Math.abs(a-b)<e;
+ t('Single neuron: 2·3−1·4+0.5 = 2.5',()=>{const n=new Net([2,1],'linear','random',1,true);n.W=[[[2,-1]]];n.B=[[.5]];return near(n.predict([3,4]),2.5)});
+ t('Activation values',()=>near(ACT.sigmoid.f(0),.5)&&ACT.relu.f(-2)===0&&ACT.tanh.f(0)===0&&near(ACT.leaky.f(-2),-.02)&&Number.isFinite(sig(-1000))&&Number.isFinite(sig(1000)));
+ t('Hand-calculated 2-2-1 forward',()=>{const n=new Net([2,2,1],'relu','random',1,true);n.W=[[[1,1],[1,-1]],[[1,2]]];n.B=[[0,0],[1]];return near(n.predict([2,1]),1*3+2*1+1)});
+ t('Numerical vs analytical gradients',()=>{const n=new Net([2,3,1],'tanh','xavier',5,false),x=[.3,-.7],y=1,g=n.grads(x,y);let worst=0;
+  for(const[l,j,i]of[[0,0,0],[0,2,1],[1,0,1]]){const w=n.W[l][j][i],e=1e-5;n.W[l][j][i]=w+e;const a=n.loss(x,y);n.W[l][j][i]=w-e;const b=n.loss(x,y);n.W[l][j][i]=w;worst=Math.max(worst,Math.abs((a-b)/(2*e)-g.gW[l][j][i]))}return worst<1e-6||'max diff '+worst});
+ t('Training changes parameters and lowers loss',()=>{const sv={X:S.X,y:S.y,net:S.net,opt:S.opt,t:S.t};S.X=[[-1],[-.5],[0],[.5],[1]];S.y=[-2,-1,0,1,2];S.opt=null;S.t=0;S.net=new Net([1,1],'linear','xavier',3,true);const w0=S.net.W[0][0][0],l0=ev([0,1,2,3,4]).loss;
+  for(let i=0;i<200;i++)trainBatch([0,1,2,3,4],{lr:.1,opt:'batch'});const l1=ev([0,1,2,3,4]).loss,ch=S.net.W[0][0][0]!==w0;Object.assign(S,sv);return(ch&&l1<l0*.1)||`loss ${l0}→${l1}`});
+ t('Export/import round trip',()=>{const n=new Net([2,4,1],'tanh','he',9,false),m=JSON.parse(JSON.stringify({format:'neuralforge-v1',sizes:n.sizes,activation:'tanh',outputActivation:'sigmoid',W:n.W,B:n.B}));if(validate(m))return validate(m);const n2=new Net(m.sizes,m.activation,'random',1,false);n2.W=m.W;n2.B=m.B;return near(n.predict([.2,.4]),n2.predict([.2,.4]),1e-12)});
+ t('Invalid model rejected',()=>validate({})!==null&&validate({format:'neuralforge-v1',sizes:[2,1],activation:'tanh',outputActivation:'sigmoid',W:[[[NaN,1]]],B:[[0]]})!==null);
+ t('Classification metrics',()=>{const m=clsMetrics([1,1,0,0],[1,0,0,0]);return near(m.acc,.75)&&near(m.pr,1)&&near(m.rc,.5)&&near(m.f1,2/3)});
+ t('Regression metrics',()=>{const m=regMetrics([1,2,3],[1,2,4]);return near(m.mse,1/3)&&near(m.mae,1/3)});
+ t('Seeded init reproducible',()=>JSON.stringify(new Net([2,3,1],'tanh','xavier',11,false).W)===JSON.stringify(new Net([2,3,1],'tanh','xavier',11,false).W));
+ R.forEach(([n,ok,m])=>log((ok?'PASS ':'FAIL ')+n+(m?' — '+m:''),ok?'ok':'bad'));log('Diagnostics executed: '+R.filter(r=>r[1]).length+'/'+R.length+' passed');drawAll()}
+/* ---------- Events ---------- */
+const reinit=m=>{gen();build(m)};
+$('ds').onchange=()=>{if($('ds').value==='custom'&&!S.custom.length)log('Custom: click the boundary canvas to add points (≥4 needed).');token++;running=false;setSt('Idle');reinit('Dataset changed — model rebuilt (previous weights lost).')};
+['n','noise','split','slope','icpt','shuf'].forEach(i=>$(i).onchange=()=>{gen();S.hist=[];S.epoch=0;refView();drawAll()});
+$('bGen').onclick=()=>{gen();refView();drawAll();log('Dataset regenerated (seed '+$('seed').value+')')};
+['hid','act','init','seed'].forEach(i=>$(i).onchange=()=>{token++;running=false;setSt('Idle');if(i==='seed')gen();build('Architecture/initialization changed — trained weights discarded.')});
+$('res').onchange=drawBD;['shW','shA','shL'].forEach(i=>$(i).onchange=drawNet);
+$('bAddL').onclick=()=>{const h=$('hid').value.trim();$('hid').value=h?h+',8':'8';$('hid').onchange()};
+$('bRmL').onclick=()=>{const a=$('hid').value.split(',').filter(s=>s.trim());a.pop();$('hid').value=a.join(',');$('hid').onchange()};
+$('bTrain').onclick=()=>guard(()=>{if(running){if(paused){paused=false;run()}return}if(S.epoch>=cfg().ep)return log('Already at the epoch limit — raise Epochs or reset weights','bad');if(S.tr.length<2)return log('Need at least 4 data points to train','bad');run()});
+$('bPause').onclick=()=>{if(!running)return;if(paused){paused=false;guard(run)}else{paused=true;token++;setSt('Paused')}};
+$('bStop').onclick=()=>{running=false;paused=false;token++;setSt('Idle');log('Training stopped at epoch '+S.epoch)};
+$('bStep').onclick=()=>guard(()=>{if(running)return log('Pause or stop training first','bad');if(!epoch(cfg()))return log('Epoch limit reached','bad');refView();drawAll()});
+$('bFwd').onclick=()=>{S.vi++;refView();drawAll();if(S.view)log(`Forward pass on sample ${S.vi%S.X.length}: input [${S.X[S.vi%S.X.length].map(v=>v.toFixed(2))}] → ${f4(S.view.A.at(-1)[0])} (target ${f4(S.y[S.vi%S.X.length])})`)};
+$('bRW').onclick=()=>{token++;running=false;setSt('Idle');build('Weights re-initialized, history cleared.')};
+$('bRA').onclick=()=>{if(confirm('Reset the entire experiment (data, model, history)?')){token++;running=false;setSt('Idle');S.custom=[];reinit('Experiment reset.')}};
+$('bFit').onclick=()=>{fitView();drawNet()};
+$('bUndo').onclick=()=>{S.custom.pop();reinit('Point removed.')};$('bClr').onclick=()=>{S.custom=[];reinit('Custom dataset cleared.')};
+$('bd').onclick=e=>{if($('ds').value!=='custom')return;const r=$('bd').getBoundingClientRect();S.custom.push([(e.clientX-r.left)/r.width*2.6-1.3,1.3-(e.clientY-r.top)/r.height*2.6,+$('cls').value]);gen();S.hist=[];S.epoch=0;refView();drawAll()};
+$('bSave').onclick=()=>{try{const o={name:$('pname').value,cfg:Object.fromEntries(IDS.map(i=>[i,$(i).value])),custom:S.custom,model:ser()};localStorage.setItem('neuralforge',JSON.stringify(o));log('Saved to this browser.','ok')}catch(e){log('Save failed (storage unavailable or full): '+e.message,'bad')}};
+$('bLoad').onclick=()=>{try{const o=JSON.parse(localStorage.getItem('neuralforge')||'null');if(!o)return log('Nothing saved yet','bad');$('pname').value=o.name||'Untitled';IDS.forEach(i=>{if(o.cfg&&o.cfg[i]!==undefined)$(i).value=o.cfg[i]});S.custom=Array.isArray(o.custom)?o.custom:[];gen();build();load(o.model);log('Loaded saved project.','ok')}catch(e){log('Load failed: '+e.message,'bad')}};
+$('bExp').onclick=()=>dl('neuralforge-model.json',JSON.stringify(ser(),null,1),'application/json');
+$('bImp').onclick=()=>$('file').click();
+$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{load(JSON.parse(r.result));log('Model imported.','ok')}catch(x){log(x.message.startsWith('Import')?x.message:'Import rejected: not valid JSON','bad')}};r.readAsText(f);e.target.value=''};
+$('bCsv').onclick=()=>{if(!S.hist.length)return log('No history to export','bad');dl('neuralforge-history.csv','# dataset='+$('ds').value+' arch='+S.net.sizes.join('-')+' act='+S.net.act+' optimizer='+$('opt').value+' lr='+$('lr').value+' seed='+$('seed').value+' (validation columns = held-out test set)\nepoch,train_loss,test_loss,train_acc,test_acc\n'+S.hist.map(h=>[h.e,h.tl,h.vl,h.ta,h.va].join(',')).join('\n'),'text/csv')};
+$('bTest').onclick=diagnostics;
+/* diagram interaction */
+let drag=null;const NC=$('net');
+NC.onpointerdown=e=>{drag={x:e.clientX,y:e.clientY,tx:V.tx,ty:V.ty,m:false};NC.setPointerCapture(e.pointerId)};
+NC.onpointermove=e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>3)drag.m=true;if(drag.m){V.tx=drag.tx+dx;V.ty=drag.ty+dy;drawNet()}};
+NC.onpointerup=e=>{if(drag&&!drag.m){const r=NC.getBoundingClientRect(),mx=(e.clientX-r.left-V.tx)/V.k,my=(e.clientY-r.top-V.ty)/V.k;let hit=null;S.pos.forEach((L,l)=>L.forEach(([x,y,rad],j)=>{if(Math.hypot(mx-x,my-y)<=rad+3)hit={l,j}}));S.sel=hit;drawNet();inspect()}drag=null};
+NC.onwheel=e=>{e.preventDefault();const r=NC.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,k=Math.min(4,Math.max(.3,V.k*(e.deltaY<0?1.1:.9)));V.tx=mx-(mx-V.tx)*k/V.k;V.ty=my-(my-V.ty)*k/V.k;V.k=k;drawNet()};
+$('insp').onchange=e=>{const t=e.target,d=t.dataset;if(!d.k||!S.net)return;const v=parseFloat(t.value);if(!Number.isFinite(v)){log('Enter a finite number','bad');return inspect()}
+ if(d.k==='b')S.net.B[+d.l][+d.j]=v;else S.net.W[+d.l][+d.j][+d.i]=v;S.mod=true;refView();drawAll();log('Parameter edited manually — model may need retraining.')};
+document.addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))return;if(e.key===' '){e.preventDefault();$('bPause').click()}else if(e.key==='f'||e.key==='F')$('bFit').click()});
+addEventListener('resize',()=>drawAll());
+gen();build('NeuralForge ready. Press Train — all values shown come from real computation.');
+</script></body></html>
+ 
